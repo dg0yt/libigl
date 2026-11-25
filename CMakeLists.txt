@@ -97,8 +97,18 @@ option(LIBIGL_INSTALL          "Enable installation of libigl targets" ${LIBIGL_
 # (by default, static build is off since libigl is a header-only library)
 option(LIBIGL_USE_STATIC_LIBRARY "Use libigl as static library" ${LIBIGL_TOPLEVEL_PROJECT})
 
+# Backend for igl::parallel_for. POOL (default) uses an internal std::thread
+# pool and needs no extra dependency. OPENMP and TBB are experimental and
+# require the corresponding toolchain/library; if the requested one is not found
+# the build falls back to POOL. SERIAL forces all parallel_for loops to run
+# serially. See include/igl/parallel_for.h.
+set(LIBIGL_PARALLEL_FOR_BACKEND "POOL" CACHE STRING
+    "igl::parallel_for backend: POOL, OPENMP, TBB, or SERIAL")
+set_property(CACHE LIBIGL_PARALLEL_FOR_BACKEND PROPERTY STRINGS POOL OPENMP TBB SERIAL)
+
 # Permissive modules. These modules are available under MPL2 license, and their dependencies are available
 # under a permissive or public domain license.
+option(LIBIGL_CYCODEBASE       "Build target igl::cycodebase"       ${LIBIGL_TOPLEVEL_PROJECT})
 option(LIBIGL_EMBREE           "Build target igl::embree"           ${LIBIGL_TOPLEVEL_PROJECT})
 option(LIBIGL_GLFW             "Build target igl::glfw"             ${LIBIGL_TOPLEVEL_PROJECT})
 option(LIBIGL_IMGUI            "Build target igl::imgui"            ${LIBIGL_TOPLEVEL_PROJECT})
@@ -166,7 +176,15 @@ if(LIBIGL_INSTALL)
     set(version_config_file "${CMAKE_CURRENT_BINARY_DIR}/LibiglConfigVersion.cmake")
     set(export_dest_dir "${CMAKE_INSTALL_LIBDIR}/cmake/igl")
 
-    foreach(suffix IN ITEMS "") #"_restricted" "_copyleft")
+    # Exported names, e.g. igl::core;igl_copyleft::cgal (see igl_install). Also
+    # substituted into the package config to define deprecated aliases.
+    get_property(LIBIGL_INSTALLED_TARGETS GLOBAL PROPERTY LIBIGL_INSTALLED_TARGETS)
+    foreach(suffix IN ITEMS "" "_copyleft") #  "_restricted"
+        # Only install export sets that received targets
+        if(NOT LIBIGL_INSTALLED_TARGETS MATCHES "(^|;)igl${suffix}::")
+            continue()
+        endif()
+
         install(EXPORT LibiglTargets${suffix}
             DESTINATION ${export_dest_dir}
             NAMESPACE igl${suffix}::
